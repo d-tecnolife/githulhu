@@ -20,7 +20,7 @@ jobs:
           xcodebuild test \
             -project Githulu.xcodeproj \
             -scheme Githulu \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,arch=arm64' \
             -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult" \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
 
