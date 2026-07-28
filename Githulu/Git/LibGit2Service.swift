@@ -640,6 +640,7 @@ private extension LibGit2Service {
         defer { parents.forEach { git_commit_free($0) } }
 
         var commitOID = git_oid()
+        let parentCount = parents.count
         try parents.withUnsafeMutableBufferPointer { parentBuffer in
             try check(
                 git_commit_create(
@@ -651,7 +652,7 @@ private extension LibGit2Service {
                     nil,
                     message,
                     tree,
-                    parents.count,
+                    parentCount,
                     parentBuffer.baseAddress
                 )
             )
