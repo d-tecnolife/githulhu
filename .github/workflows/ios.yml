@@ -20,4 +20,20 @@ jobs:
           -project Githulu.xcodeproj
           -scheme Githulu
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+          -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult"
           CODE_SIGNING_ALLOWED=NO
+
+      - name: Print test failure summary
+        if: failure()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
+          xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
+
+      - name: Upload Xcode test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Githulu-test-results
+          path: ${{ runner.temp }}/Githulu-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
