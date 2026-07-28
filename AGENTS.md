@@ -4,7 +4,7 @@
 
 - Never commit or push directly to `main`.
 - Treat `main` as the reviewed production branch.
-- Start every feature from the latest `main` on a branch named `codex/<short-feature-name>`.
+- For every feature request, automatically start from the latest `main` on a branch named `codex/<short-feature-name>` before implementing any changes.
 - The `codex` branch is an optional integration/staging branch; do not use it for unrelated concurrent features.
 - Push feature branches with `git push -u origin codex/<short-feature-name>`.
 
@@ -13,9 +13,10 @@
 1. Implement only the requested feature and run the relevant checks.
 2. Commit the feature with a clear conventional-style message.
 3. Push the feature branch; do not merge it into `main`.
-4. Use an independent Codex reviewer (one that did not author the implementation) to review the final diff for correctness, security, tests, and UI/accessibility where relevant.
-5. Address all actionable review findings, rerun checks, and have the reviewer confirm the final diff.
-6. Open or update a pull request targeting `main`. Only merge after that review is complete and required checks pass.
+4. Open or update a **draft** pull request targeting `main`.
+5. Delegate an independent Codex reviewer (one that did not author the implementation) to review both the final diff and the opened draft PR for correctness, security, tests, and UI/accessibility where relevant.
+6. Address all actionable review findings, rerun checks, and have the independent reviewer confirm the final diff and draft PR.
+7. Only mark the pull request ready for review or merge after that review is complete and required checks pass.
 
 ## Agent roles
 
