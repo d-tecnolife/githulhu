@@ -255,7 +255,7 @@ actor LibGit2Service: GitServicing {
                 GIT_CHECKOUT_ALLOW_CONFLICTS.rawValue |
                 GIT_CHECKOUT_CONFLICT_STYLE_MERGE.rawValue
             var head = annotated
-            try withUnsafePointer(to: &head) { pointer in
+            try withUnsafeMutablePointer(to: &head) { pointer in
                 try check(git_merge(repository, pointer, 1, &mergeOptions, &checkoutOptions))
             }
 
@@ -595,7 +595,7 @@ private extension LibGit2Service {
             guard size <= Self.conflictLimit else {
                 return GitDiff(path: path, text: nil, isBinary: false, isTooLarge: true)
             }
-            let text = buffer.ptr.map(String.init(cString:)) ?? ""
+            let text = String(cString: buffer.ptr)
             return GitDiff(path: path, text: text, isBinary: false, isTooLarge: false)
         }
         return nil
@@ -640,7 +640,7 @@ private extension LibGit2Service {
         defer { parents.forEach { git_commit_free($0) } }
 
         var commitOID = git_oid()
-        try parents.withUnsafeBufferPointer { parentBuffer in
+        try parents.withUnsafeMutableBufferPointer { parentBuffer in
             try check(
                 git_commit_create(
                     &commitOID,
