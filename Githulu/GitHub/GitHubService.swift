@@ -57,7 +57,7 @@ enum GitHubError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .missingClientID:
-            return "Set GITHUB_CLIENT_ID in the app target's build settings."
+            return "GitHub sign-in is unavailable in this build."
         case .invalidResponse:
             return "GitHub returned an invalid response."
         case .authorizationExpired:
