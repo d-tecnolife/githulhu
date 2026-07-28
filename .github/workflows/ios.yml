@@ -1,0 +1,44 @@
+name: iOS
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Githulu.xcodeproj -scheme Githulu
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Githulu.xcodeproj \
+            -scheme Githulu \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,arch=arm64' \
+            -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Print test failure summary
+        if: failure()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
+          xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
+
+      - name: Upload Xcode failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Githulu-failure-diagnostics
+          path: |
+            ${{ runner.temp }}/Githulu-tests.xcresult
+            ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: warn
+          retention-days: 7
