@@ -22,6 +22,8 @@ jobs:
             -scheme Githulu \
             -destination 'platform=iOS Simulator,name=iPhone 16 Pro,arch=arm64' \
             -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Print test failure summary
