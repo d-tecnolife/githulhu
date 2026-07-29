@@ -26,8 +26,7 @@ ID as a repository Actions variable named `GITHULHU_CLIENT_ID` under
 **Settings → Secrets and variables → Actions → Variables**. The client ID is
 public application metadata. Add the OAuth app client secret separately as an
 Actions repository **secret** named `GITHULHU_CLIENT_SECRET`; never commit it to
-the repository. Existing `GITHULU_CLIENT_ID` and `GITHULU_CLIENT_SECRET`
-settings remain accepted by the build workflow during the rename.
+the repository.
 
 GitHub currently requires a client secret for authorization-code token
 exchange, even with PKCE. Native apps cannot keep an embedded client secret

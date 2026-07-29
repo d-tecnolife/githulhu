@@ -12,8 +12,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      GITHULHU_CLIENT_ID: ${{ vars.GITHULHU_CLIENT_ID || vars.GITHULU_CLIENT_ID }}
-      GITHULHU_CLIENT_SECRET: ${{ secrets.GITHULHU_CLIENT_SECRET || secrets.GITHULU_CLIENT_SECRET }}
+      GITHULHU_CLIENT_ID: ${{ vars.GITHULHU_CLIENT_ID }}
+      GITHULHU_CLIENT_SECRET: ${{ secrets.GITHULHU_CLIENT_SECRET }}
 
     steps:
       - name: Check out source
