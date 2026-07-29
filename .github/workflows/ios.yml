@@ -12,6 +12,39 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select a compatible iPhone simulator
+        id: simulator
+        run: |
+          IOS_SDK_VERSION="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          RUNTIME_SUFFIX="iOS-${IOS_SDK_VERSION//./-}"
+          RUNTIME_ID="$(xcrun simctl list runtimes available -j | jq -r \
+            --arg suffix "$RUNTIME_SUFFIX" \
+            '[.runtimes[] | select(.isAvailable == true and (.identifier | endswith($suffix)))] | first | .identifier // empty')"
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "::error::No iOS $IOS_SDK_VERSION Simulator runtime is installed for the selected Xcode."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+
+          SIMULATOR_UDID="$(xcrun simctl list devices available -j | jq -r \
+            --arg runtime "$RUNTIME_ID" \
+            '(.devices[$runtime] // []) | map(select(.isAvailable == true)) | first | .udid // empty')"
+          if [ -z "$SIMULATOR_UDID" ]; then
+            DEVICE_TYPE_ID="$(xcrun simctl list devicetypes -j | jq -r \
+              '([.devicetypes[] | select(.name == "iPhone 16 Pro")][0] //
+                [.devicetypes[] | select(.name | startswith("iPhone"))][0]).identifier // empty')"
+            if [ -z "$DEVICE_TYPE_ID" ]; then
+              echo "::error::No iPhone Simulator device type is installed."
+              xcrun simctl list devicetypes
+              exit 1
+            fi
+            SIMULATOR_UDID="$(xcrun simctl create "Githulu CI iPhone" "$DEVICE_TYPE_ID" "$RUNTIME_ID")"
+          fi
+
+          echo "Using simulator $SIMULATOR_UDID with runtime $RUNTIME_ID"
+          echo "udid=$SIMULATOR_UDID" >> "$GITHUB_OUTPUT"
+
       - name: Resolve packages
         run: xcodebuild -resolvePackageDependencies -project Githulu.xcodeproj -scheme Githulu
       - name: Build and test
@@ -20,7 +53,7 @@ jobs:
           xcodebuild test \
             -project Githulu.xcodeproj \
             -scheme Githulu \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,arch=arm64' \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
             -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult" \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
