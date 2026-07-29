@@ -9,18 +9,30 @@ code editor.
 
 - Xcode 16+
 - iOS 17+
-- A GitHub OAuth App with Device Flow enabled
+- A GitHub OAuth App
 
 Open `Githulu.xcodeproj`, select a Development Team, and place the OAuth app's
-client ID in the `GITHUB_CLIENT_ID` build setting. OAuth tokens are stored in
-the iOS Keychain; SwiftData stores repository bookmarks and operation history
-only.
+client ID and client secret in the `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET` build settings. OAuth tokens are stored in the iOS
+Keychain; SwiftData stores repository bookmarks and operation history only.
+
+Register the OAuth App with `githulu://oauth/callback` as its **Authorization
+callback URL**. Device Flow is not used and should remain disabled. Githulu
+opens GitHub in the system authentication browser and uses authorization code
+flow with PKCE.
 
 For the `Build Sideload IPA` GitHub Actions workflow, add the OAuth app client
-ID as a repository Actions variable named `GITHUB_CLIENT_ID` under
+ID as a repository Actions variable named `GITHULU_CLIENT_ID` under
 **Settings → Secrets and variables → Actions → Variables**. The client ID is
-public application metadata; never add the OAuth client secret to the app or
-repository.
+public application metadata. Add the OAuth app client secret separately as an
+Actions repository **secret** named `GITHULU_CLIENT_SECRET`; never commit it to
+the repository.
+
+GitHub currently requires a client secret for authorization-code token
+exchange, even with PKCE. Native apps cannot keep an embedded client secret
+confidential, so treat it as an application identifier rather than authority:
+it cannot access a user without that user completing authorization. Rotate it
+from the OAuth App settings and rebuild the app if it is abused.
 
 The app can only access folders explicitly granted through the Files picker.
 

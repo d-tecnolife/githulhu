@@ -1,4 +1,6 @@
 import Foundation
+import CryptoKit
+import Security
 
 struct GitHubAccount: Codable, Equatable {
     let login: String
@@ -29,41 +31,39 @@ struct GitHubRepository: Codable, Identifiable, Equatable {
     }
 }
 
-struct DeviceAuthorization: Codable, Equatable, Identifiable {
-    let deviceCode: String
-    let userCode: String
-    let verificationURI: URL
-    let expiresIn: Int
-    let interval: Int
-
-    var id: String { deviceCode }
-
-    private enum CodingKeys: String, CodingKey {
-        case deviceCode = "device_code"
-        case userCode = "user_code"
-        case verificationURI = "verification_uri"
-        case expiresIn = "expires_in"
-        case interval
-    }
+struct GitHubAuthorizationRequest: Equatable {
+    let authorizationURL: URL
+    let callbackURLScheme: String
+    let state: String
+    let codeVerifier: String
 }
 
 enum GitHubError: LocalizedError, Equatable {
     case missingClientID
+    case missingClientSecret
     case invalidResponse
-    case authorizationExpired
     case authorizationDenied
+    case invalidCallback
+    case stateMismatch
+    case unableToStartAuthentication
     case api(String)
 
     var errorDescription: String? {
         switch self {
         case .missingClientID:
             return "GitHub sign-in is unavailable in this build."
+        case .missingClientSecret:
+            return "GitHub sign-in credentials are incomplete in this build."
         case .invalidResponse:
             return "GitHub returned an invalid response."
-        case .authorizationExpired:
-            return "The GitHub sign-in code expired. Try again."
         case .authorizationDenied:
             return "GitHub sign-in was cancelled."
+        case .invalidCallback:
+            return "GitHub returned an invalid sign-in callback."
+        case .stateMismatch:
+            return "The GitHub sign-in response could not be verified. Try again."
+        case .unableToStartAuthentication:
+            return "The secure GitHub sign-in window could not be opened."
         case .api(let message):
             return message
         }
@@ -71,81 +71,142 @@ enum GitHubError: LocalizedError, Equatable {
 }
 
 protocol GitHubServicing {
-    func beginDeviceAuthorization() async throws -> DeviceAuthorization
-    func pollForToken(_ authorization: DeviceAuthorization) async throws -> String
+    func makeAuthorizationRequest() throws -> GitHubAuthorizationRequest
+    func exchangeAuthorizationCode(
+        callbackURL: URL,
+        request: GitHubAuthorizationRequest
+    ) async throws -> String
     func account(token: String) async throws -> GitHubAccount
     func repositories(token: String) async throws -> [GitHubRepository]
 }
 
 final class GitHubService: GitHubServicing {
+    private static let callbackURL = URL(string: "githulu://oauth/callback")!
     private let session: URLSession
-    private let bundle: Bundle
+    private let configuredClientID: String?
+    private let configuredClientSecret: String?
 
     init(session: URLSession = .shared, bundle: Bundle = .main) {
         self.session = session
-        self.bundle = bundle
+        self.configuredClientID = bundle.object(forInfoDictionaryKey: "GITHUB_CLIENT_ID") as? String
+        self.configuredClientSecret = bundle.object(
+            forInfoDictionaryKey: "GITHUB_CLIENT_SECRET"
+        ) as? String
+    }
+
+    init(
+        session: URLSession = .shared,
+        clientID: String,
+        clientSecret: String = "test-client-secret"
+    ) {
+        self.session = session
+        self.configuredClientID = clientID
+        self.configuredClientSecret = clientSecret
     }
 
     private var clientID: String? {
-        guard let value = bundle.object(forInfoDictionaryKey: "GITHUB_CLIENT_ID") as? String,
-              !value.isEmpty
+        guard let value = configuredClientID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value != "$(GITHUB_CLIENT_ID)"
         else { return nil }
         return value
     }
 
-    func beginDeviceAuthorization() async throws -> DeviceAuthorization {
-        guard let clientID else { throw GitHubError.missingClientID }
-        var request = URLRequest(url: URL(string: "https://github.com/login/device/code")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = formData([
-            "client_id": clientID,
-            "scope": "repo read:user"
-        ])
-        return try await decode(DeviceAuthorization.self, request: request)
+    private var clientSecret: String? {
+        guard let value = configuredClientSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value != "$(GITHUB_CLIENT_SECRET)"
+        else { return nil }
+        return value
     }
 
-    func pollForToken(_ authorization: DeviceAuthorization) async throws -> String {
+    func makeAuthorizationRequest() throws -> GitHubAuthorizationRequest {
         guard let clientID else { throw GitHubError.missingClientID }
-        let deadline = Date().addingTimeInterval(TimeInterval(authorization.expiresIn))
-        var interval = max(authorization.interval, 5)
-
-        while Date() < deadline {
-            try Task.checkCancellation()
-            try await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
-
-            var request = URLRequest(url: URL(string: "https://github.com/login/oauth/access_token")!)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.httpBody = formData([
-                "client_id": clientID,
-                "device_code": authorization.deviceCode,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
-            ])
-
-            let (data, response) = try await session.data(for: request)
-            try validate(response)
-            let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            if let token = payload?["access_token"] as? String { return token }
-
-            switch payload?["error"] as? String {
-            case "authorization_pending":
-                continue
-            case "slow_down":
-                interval += 5
-            case "expired_token":
-                throw GitHubError.authorizationExpired
-            case "access_denied":
-                throw GitHubError.authorizationDenied
-            case let error?:
-                throw GitHubError.api(error)
-            default:
-                throw GitHubError.invalidResponse
-            }
+        let verifier = try GitHubPKCE.randomValue()
+        let state = try GitHubPKCE.randomValue()
+        var components = URLComponents(string: "https://github.com/login/oauth/authorize")!
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: Self.callbackURL.absoluteString),
+            URLQueryItem(name: "scope", value: "repo read:user"),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: GitHubPKCE.challenge(for: verifier)),
+            URLQueryItem(name: "code_challenge_method", value: "S256"),
+            URLQueryItem(name: "prompt", value: "select_account")
+        ]
+        guard let authorizationURL = components.url else {
+            throw GitHubError.invalidResponse
         }
-        throw GitHubError.authorizationExpired
+        return GitHubAuthorizationRequest(
+            authorizationURL: authorizationURL,
+            callbackURLScheme: Self.callbackURL.scheme!,
+            state: state,
+            codeVerifier: verifier
+        )
+    }
+
+    func exchangeAuthorizationCode(
+        callbackURL: URL,
+        request authorization: GitHubAuthorizationRequest
+    ) async throws -> String {
+        guard let clientID else { throw GitHubError.missingClientID }
+        guard let clientSecret else { throw GitHubError.missingClientSecret }
+        let code = try Self.authorizationCode(
+            from: callbackURL,
+            expectedState: authorization.state
+        )
+
+        var tokenRequest = URLRequest(url: URL(string: "https://github.com/login/oauth/access_token")!)
+        tokenRequest.httpMethod = "POST"
+        tokenRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        tokenRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        tokenRequest.httpBody = formData([
+            "client_id": clientID,
+            "client_secret": clientSecret,
+            "code": code,
+            "redirect_uri": Self.callbackURL.absoluteString,
+            "code_verifier": authorization.codeVerifier
+        ])
+
+        let (data, response) = try await session.data(for: tokenRequest)
+        try validate(response)
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GitHubError.invalidResponse
+        }
+        if let token = payload["access_token"] as? String, !token.isEmpty {
+            return token
+        }
+        if let description = payload["error_description"] as? String {
+            throw GitHubError.api(description)
+        }
+        if let error = payload["error"] as? String {
+            throw GitHubError.api(error)
+        }
+        throw GitHubError.invalidResponse
+    }
+
+    static func authorizationCode(from callbackURL: URL, expectedState: String) throws -> String {
+        guard callbackURL.scheme == Self.callbackURL.scheme,
+              callbackURL.host == Self.callbackURL.host,
+              callbackURL.path == Self.callbackURL.path,
+              let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)
+        else {
+            throw GitHubError.invalidCallback
+        }
+        let queryItems = components.queryItems ?? []
+        let value: (String) -> String? = { name in
+            queryItems.first(where: { $0.name == name })?.value
+        }
+        guard value("state") == expectedState else {
+            throw GitHubError.stateMismatch
+        }
+        if value("error") == "access_denied" {
+            throw GitHubError.authorizationDenied
+        }
+        guard let code = value("code"), !code.isEmpty else {
+            throw GitHubError.invalidCallback
+        }
+        return code
     }
 
     func account(token: String) async throws -> GitHubAccount {
@@ -195,13 +256,36 @@ final class GitHubService: GitHubServicing {
     }
 
     private func formData(_ values: [String: String]) -> Data? {
-        values
-            .map { key, value in
-                let escaped = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
-                return "\(key)=\(escaped)"
-            }
-            .sorted()
-            .joined(separator: "&")
-            .data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = values
+            .map { URLQueryItem(name: $0.key, value: $0.value) }
+            .sorted { $0.name < $1.name }
+        return components.percentEncodedQuery?.data(using: .utf8)
+    }
+}
+
+enum GitHubPKCE {
+    static func randomValue(byteCount: Int = 32) throws -> String {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        let status = bytes.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, byteCount, buffer.baseAddress!)
+        }
+        guard status == errSecSuccess else {
+            throw GitHubError.invalidResponse
+        }
+        return Data(bytes).base64URLEncodedString()
+    }
+
+    static func challenge(for verifier: String) -> String {
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString()
+    }
+}
+
+private extension Data {
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }
