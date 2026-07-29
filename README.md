@@ -16,6 +16,12 @@ client ID in the `GITHUB_CLIENT_ID` build setting. OAuth tokens are stored in
 the iOS Keychain; SwiftData stores repository bookmarks and operation history
 only.
 
+For the `Build Sideload IPA` GitHub Actions workflow, add the OAuth app client
+ID as a repository Actions variable named `GITHUB_CLIENT_ID` under
+**Settings → Secrets and variables → Actions → Variables**. The client ID is
+public application metadata; never add the OAuth client secret to the app or
+repository.
+
 The app can only access folders explicitly granted through the Files picker.
 
 ## Safety boundaries

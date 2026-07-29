@@ -5,6 +5,7 @@ import SwiftUI
 final class AppModel: ObservableObject {
     @Published private(set) var account: GitHubAccount?
     @Published private(set) var availableRepositories: [GitHubRepository] = []
+    @Published private(set) var isRestoringSession = true
     @Published var authorization: DeviceAuthorization?
     @Published var operation: GitProgress?
     @Published var errorMessage: String?
@@ -30,7 +31,11 @@ final class AppModel: ObservableObject {
     var isSignedIn: Bool { account != nil }
 
     func restoreSession() async {
-        guard account == nil else { return }
+        guard account == nil else {
+            isRestoringSession = false
+            return
+        }
+        defer { isRestoringSession = false }
         do {
             guard let token = try keychain.loadToken() else { return }
             account = try await github.account(token: token)
@@ -43,6 +48,7 @@ final class AppModel: ObservableObject {
     }
 
     func beginSignIn() async {
+        errorMessage = nil
         do {
             authorization = try await github.beginDeviceAuthorization()
         } catch {
@@ -70,6 +76,7 @@ final class AppModel: ObservableObject {
 
     func signOut() {
         authorizationTask?.cancel()
+        authorizationTask = nil
         try? keychain.deleteToken()
         account = nil
         availableRepositories = []

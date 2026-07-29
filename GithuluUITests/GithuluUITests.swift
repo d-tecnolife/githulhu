@@ -5,13 +5,13 @@ final class GithuluUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testEmptyRepositoryStateIsAccessible() {
+    func testSignedOutLandingPage() {
         let app = XCUIApplication()
         app.launchArguments.append("-ui-testing")
         app.launch()
 
-        XCTAssertTrue(app.navigationBars["Githulu"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Add repository"].exists)
+        XCTAssertTrue(app.staticTexts["Githulu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Sign in to GitHub"].exists)
     }
 
     func testAccountControlHasAccessibleLabel() {

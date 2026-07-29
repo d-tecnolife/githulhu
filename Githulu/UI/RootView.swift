@@ -3,19 +3,61 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct RootView: View {
+    private enum FolderPickerAction {
+        case openExisting
+        case cloneDestination
+    }
+
     @EnvironmentObject private var app: AppModel
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \RepositoryRecord.lastOpenedAt, order: .reverse)
     private var repositories: [RepositoryRecord]
     @Query private var operationHistory: [OperationRecord]
 
-    @State private var showingOpenPicker = false
+    @State private var showingFolderPicker = false
+    @State private var folderPickerAction: FolderPickerAction?
     @State private var showingRepositoryPicker = false
     @State private var cloneSelection: GitHubRepository?
-    @State private var showingCloneDestination = false
     @State private var activeCloneTask: Task<Void, Never>?
 
     var body: some View {
+        Group {
+            if app.isRestoringSession {
+                ProgressView("Restoring GitHub session…")
+            } else if app.isSignedIn {
+                repositoryNavigation
+            } else {
+                SignedOutView {
+                    Task { await app.beginSignIn() }
+                }
+            }
+        }
+        .task {
+            await app.restoreSession()
+        }
+        .sheet(
+            item: $app.authorization,
+            onDismiss: { app.cancelSignIn() },
+            content: { authorization in
+                DeviceAuthorizationView(authorization: authorization)
+                    .onAppear { app.awaitSignIn() }
+            }
+        )
+        .alert("Githulu", isPresented: errorPresented) {
+            Button("OK") { app.errorMessage = nil }
+        } message: {
+            Text(app.errorMessage ?? "")
+        }
+        .overlay {
+            if let operation = app.operation {
+                OperationOverlay(progress: operation) {
+                    activeCloneTask?.cancel()
+                }
+            }
+        }
+    }
+
+    private var repositoryNavigation: some View {
         NavigationStack {
             Group {
                 if repositories.isEmpty {
@@ -37,7 +79,7 @@ struct RootView: View {
                         }
                         .onDelete(perform: removeRepositories)
                     }
-                    .refreshable { await app.restoreSession() }
+                    .refreshable { await app.refreshRepositories() }
                 }
             }
             .navigationTitle("Githulu")
@@ -56,39 +98,26 @@ struct RootView: View {
             }
             .task {
                 recoverInterruptedOperations()
-                await app.restoreSession()
             }
-            .sheet(isPresented: $showingRepositoryPicker) {
-                GitHubRepositoryPicker { repository in
-                    showingRepositoryPicker = false
-                    cloneSelection = repository
-                    showingCloneDestination = true
-                }
-            }
-            .fileImporter(
-                isPresented: $showingOpenPicker,
-                allowedContentTypes: [.folder],
-                allowsMultipleSelection: false,
-                onCompletion: openExisting
-            )
-            .fileImporter(
-                isPresented: $showingCloneDestination,
-                allowedContentTypes: [.folder],
-                allowsMultipleSelection: false,
-                onCompletion: chooseCloneDestination
-            )
-            .alert("Githulu", isPresented: errorPresented) {
-                Button("OK") { app.errorMessage = nil }
-            } message: {
-                Text(app.errorMessage ?? "")
-            }
-            .overlay {
-                if let operation = app.operation {
-                    OperationOverlay(progress: operation) {
-                        activeCloneTask?.cancel()
+            .sheet(
+                isPresented: $showingRepositoryPicker,
+                onDismiss: {
+                    if cloneSelection != nil {
+                        presentFolderPicker(.cloneDestination)
                     }
                 }
+            ) {
+                GitHubRepositoryPicker { repository in
+                    cloneSelection = repository
+                    showingRepositoryPicker = false
+                }
             }
+            .fileImporter(
+                isPresented: $showingFolderPicker,
+                allowedContentTypes: [.folder],
+                allowsMultipleSelection: false,
+                onCompletion: handleFolderSelection
+            )
         }
     }
 
@@ -96,6 +125,7 @@ struct RootView: View {
     private var repositoryActions: some View {
         Button {
             if app.isSignedIn {
+                cloneSelection = nil
                 showingRepositoryPicker = true
             } else {
                 Task { await app.beginSignIn() }
@@ -104,7 +134,7 @@ struct RootView: View {
             Label("Clone from GitHub", systemImage: "square.and.arrow.down")
         }
         Button {
-            showingOpenPicker = true
+            presentFolderPicker(.openExisting)
         } label: {
             Label("Open from Files", systemImage: "folder")
         }
@@ -129,14 +159,6 @@ struct RootView: View {
             Image(systemName: app.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle")
         }
         .accessibilityLabel(app.isSignedIn ? "GitHub account" : "Sign in to GitHub")
-            .sheet(
-                item: $app.authorization,
-                onDismiss: { app.cancelSignIn() },
-                content: { authorization in
-                    DeviceAuthorizationView(authorization: authorization)
-                        .onAppear { app.awaitSignIn() }
-                }
-            )
     }
 
     private var errorPresented: Binding<Bool> {
@@ -159,9 +181,26 @@ struct RootView: View {
         }
     }
 
+    private func presentFolderPicker(_ action: FolderPickerAction) {
+        folderPickerAction = action
+        showingFolderPicker = true
+    }
+
+    private func handleFolderSelection(_ result: Result<[URL], Error>) {
+        guard let action = folderPickerAction else { return }
+        folderPickerAction = nil
+        switch action {
+        case .openExisting:
+            openExisting(result)
+        case .cloneDestination:
+            chooseCloneDestination(result)
+        }
+    }
+
     private func chooseCloneDestination(_ result: Result<[URL], Error>) {
         activeCloneTask = Task {
             defer { activeCloneTask = nil }
+            defer { cloneSelection = nil }
             do {
                 guard let repository = cloneSelection,
                       let destination = try result.get().first
@@ -169,7 +208,6 @@ struct RootView: View {
                 let record = try await app.clone(repository, inside: destination)
                 modelContext.insert(record)
                 try modelContext.save()
-                cloneSelection = nil
             } catch {
                 app.report(error)
             }
@@ -190,6 +228,28 @@ struct RootView: View {
             changed = true
         }
         if changed { try? modelContext.save() }
+    }
+}
+
+private struct SignedOutView: View {
+    let signIn: () -> Void
+
+    var body: some View {
+        VStack(spacing: 28) {
+            Text("Githulu")
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+
+            Button(action: signIn) {
+                Label("Sign in to GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityHint("Connects your GitHub account to Githulu")
+        }
+        .padding(32)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
