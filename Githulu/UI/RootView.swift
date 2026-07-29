@@ -27,22 +27,15 @@ struct RootView: View {
             } else if app.isSignedIn {
                 repositoryNavigation
             } else {
-                SignedOutView {
-                    Task { await app.beginSignIn() }
-                }
+                SignedOutView(
+                    isAuthenticating: app.isAuthenticating,
+                    signIn: app.beginSignIn
+                )
             }
         }
         .task {
             await app.restoreSession()
         }
-        .sheet(
-            item: $app.authorization,
-            onDismiss: { app.cancelSignIn() },
-            content: { authorization in
-                DeviceAuthorizationView(authorization: authorization)
-                    .onAppear { app.awaitSignIn() }
-            }
-        )
         .alert("Githulu", isPresented: errorPresented) {
             Button("OK") { app.errorMessage = nil }
         } message: {
@@ -128,7 +121,7 @@ struct RootView: View {
                 cloneSelection = nil
                 showingRepositoryPicker = true
             } else {
-                Task { await app.beginSignIn() }
+                app.beginSignIn()
             }
         } label: {
             Label("Clone from GitHub", systemImage: "square.and.arrow.down")
@@ -152,7 +145,7 @@ struct RootView: View {
                 }
             } else {
                 Button("Sign in to GitHub") {
-                    Task { await app.beginSignIn() }
+                    app.beginSignIn()
                 }
             }
         } label: {
@@ -232,6 +225,7 @@ struct RootView: View {
 }
 
 private struct SignedOutView: View {
+    let isAuthenticating: Bool
     let signIn: () -> Void
 
     var body: some View {
@@ -240,11 +234,18 @@ private struct SignedOutView: View {
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
 
             Button(action: signIn) {
-                Label("Sign in to GitHub", systemImage: "person.crop.circle.badge.checkmark")
-                    .frame(maxWidth: .infinity)
+                if isAuthenticating {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Signing in to GitHub")
+                } else {
+                    Label("Sign in to GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                        .frame(maxWidth: .infinity)
+                }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(isAuthenticating)
             .accessibilityHint("Connects your GitHub account to Githulu")
         }
         .padding(32)

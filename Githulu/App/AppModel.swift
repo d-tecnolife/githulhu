@@ -1,12 +1,14 @@
+import AuthenticationServices
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var account: GitHubAccount?
     @Published private(set) var availableRepositories: [GitHubRepository] = []
     @Published private(set) var isRestoringSession = true
-    @Published var authorization: DeviceAuthorization?
+    @Published private(set) var isAuthenticating = false
     @Published var operation: GitProgress?
     @Published var errorMessage: String?
 
@@ -14,7 +16,8 @@ final class AppModel: ObservableObject {
     private let github: GitHubServicing
     private let keychain: TokenStoring
     private let bookmarks: BookmarkStoring
-    private var authorizationTask: Task<Void, Never>?
+    private let authenticationPresentationContext = AuthenticationPresentationContext()
+    private var authenticationSession: ASWebAuthenticationSession?
 
     init(
         git: GitServicing,
@@ -47,46 +50,50 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func beginSignIn() async {
+    func beginSignIn() {
+        guard !isAuthenticating else { return }
         errorMessage = nil
         do {
-            authorization = try await github.beginDeviceAuthorization()
+            let request = try github.makeAuthorizationRequest()
+            isAuthenticating = true
+            let session = ASWebAuthenticationSession(
+                url: request.authorizationURL,
+                callbackURLScheme: request.callbackURLScheme
+            ) { [weak self] callbackURL, error in
+                Task { @MainActor [weak self] in
+                    await self?.completeSignIn(
+                        callbackURL: callbackURL,
+                        request: request,
+                        sessionError: error
+                    )
+                }
+            }
+            session.presentationContextProvider = authenticationPresentationContext
+            session.prefersEphemeralWebBrowserSession = false
+            authenticationSession = session
+            guard session.start() else {
+                authenticationSession = nil
+                isAuthenticating = false
+                throw GitHubError.unableToStartAuthentication
+            }
         } catch {
             report(error)
         }
     }
 
-    func awaitSignIn() {
-        guard let authorization else { return }
-        authorizationTask?.cancel()
-        authorizationTask = Task {
-            do {
-                let token = try await github.pollForToken(authorization)
-                try keychain.saveToken(token)
-                account = try await github.account(token: token)
-                availableRepositories = try await github.repositories(token: token)
-                self.authorization = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                report(error)
-            }
-        }
-    }
-
     func signOut() {
-        authorizationTask?.cancel()
-        authorizationTask = nil
+        authenticationSession?.cancel()
+        authenticationSession = nil
+        isAuthenticating = false
         try? keychain.deleteToken()
         account = nil
         availableRepositories = []
-        authorization = nil
     }
 
     func cancelSignIn() {
-        authorizationTask?.cancel()
-        authorizationTask = nil
-        authorization = nil
+        authenticationSession?.cancel()
+        authenticationSession = nil
+        isAuthenticating = false
     }
 
     func refreshRepositories() async {
@@ -160,5 +167,57 @@ final class AppModel: ObservableObject {
             throw GitServiceError.authenticationFailed
         }
         return token
+    }
+
+    private func completeSignIn(
+        callbackURL: URL?,
+        request: GitHubAuthorizationRequest,
+        sessionError: Error?
+    ) async {
+        defer {
+            authenticationSession = nil
+            isAuthenticating = false
+        }
+        if let authenticationError = sessionError as? ASWebAuthenticationSessionError,
+           authenticationError.code == .canceledLogin {
+            return
+        }
+        if let sessionError {
+            report(sessionError)
+            return
+        }
+        guard let callbackURL else {
+            report(GitHubError.invalidCallback)
+            return
+        }
+        do {
+            let token = try await github.exchangeAuthorizationCode(
+                callbackURL: callbackURL,
+                request: request
+            )
+            let signedInAccount = try await github.account(token: token)
+            let repositories = try await github.repositories(token: token)
+            try keychain.saveToken(token)
+            account = signedInAccount
+            availableRepositories = repositories
+        } catch {
+            try? keychain.deleteToken()
+            account = nil
+            availableRepositories = []
+            report(error)
+        }
+    }
+}
+
+@MainActor
+private final class AuthenticationPresentationContext:
+    NSObject,
+    ASWebAuthenticationPresentationContextProviding
+{
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) ?? UIWindow()
     }
 }

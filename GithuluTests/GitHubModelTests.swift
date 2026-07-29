@@ -26,23 +26,78 @@ final class GitHubModelTests: XCTestCase {
         XCTAssertEqual(repository.defaultBranch, "main")
     }
 
-    func testDeviceAuthorizationDecodesWireNames() throws {
-        let data = Data(
-            """
-            {
-              "device_code": "device",
-              "user_code": "ABCD-EFGH",
-              "verification_uri": "https://github.com/login/device",
-              "expires_in": 900,
-              "interval": 5
+    func testPKCEChallengeMatchesRFC7636Example() {
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+
+        XCTAssertEqual(
+            GitHubPKCE.challenge(for: verifier),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        )
+    }
+
+    func testAuthorizationRequestUsesCallbackStateAndPKCE() throws {
+        let service = GitHubService(clientID: "test-client-id")
+        let request = try service.makeAuthorizationRequest()
+        let components = try XCTUnwrap(
+            URLComponents(url: request.authorizationURL, resolvingAgainstBaseURL: false)
+        )
+        let query = Dictionary(
+            uniqueKeysWithValues: try XCTUnwrap(components.queryItems).compactMap { item in
+                item.value.map { (item.name, $0) }
             }
-            """.utf8
         )
 
-        let authorization = try JSONDecoder().decode(DeviceAuthorization.self, from: data)
+        XCTAssertEqual(components.scheme, "https")
+        XCTAssertEqual(components.host, "github.com")
+        XCTAssertEqual(components.path, "/login/oauth/authorize")
+        XCTAssertEqual(query["client_id"], "test-client-id")
+        XCTAssertEqual(query["redirect_uri"], "githulu://oauth/callback")
+        XCTAssertEqual(query["scope"], "repo read:user")
+        XCTAssertEqual(query["state"], request.state)
+        XCTAssertEqual(query["code_challenge_method"], "S256")
+        XCTAssertEqual(query["code_challenge"], GitHubPKCE.challenge(for: request.codeVerifier))
+        XCTAssertEqual(request.callbackURLScheme, "githulu")
+    }
 
-        XCTAssertEqual(authorization.deviceCode, "device")
-        XCTAssertEqual(authorization.userCode, "ABCD-EFGH")
-        XCTAssertEqual(authorization.expiresIn, 900)
+    func testCallbackRequiresMatchingState() throws {
+        let validURL = try XCTUnwrap(
+            URL(string: "githulu://oauth/callback?code=temporary-code&state=expected")
+        )
+        let invalidURL = try XCTUnwrap(
+            URL(string: "githulu://oauth/callback?code=temporary-code&state=attacker")
+        )
+
+        XCTAssertEqual(
+            try GitHubService.authorizationCode(from: validURL, expectedState: "expected"),
+            "temporary-code"
+        )
+        XCTAssertThrowsError(
+            try GitHubService.authorizationCode(from: invalidURL, expectedState: "expected")
+        ) { error in
+            XCTAssertEqual(error as? GitHubError, .stateMismatch)
+        }
+    }
+
+    func testTokenExchangeRequiresConfiguredClientSecret() async throws {
+        let service = GitHubService(clientID: "test-client-id", clientSecret: "")
+        let request = GitHubAuthorizationRequest(
+            authorizationURL: try XCTUnwrap(URL(string: "https://github.com/login/oauth/authorize")),
+            callbackURLScheme: "githulu",
+            state: "expected",
+            codeVerifier: "verifier"
+        )
+        let callback = try XCTUnwrap(
+            URL(string: "githulu://oauth/callback?code=temporary-code&state=expected")
+        )
+
+        do {
+            _ = try await service.exchangeAuthorizationCode(
+                callbackURL: callback,
+                request: request
+            )
+            XCTFail("Expected a missing client secret error.")
+        } catch {
+            XCTAssertEqual(error as? GitHubError, .missingClientSecret)
+        }
     }
 }

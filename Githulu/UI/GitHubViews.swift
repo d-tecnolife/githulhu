@@ -1,46 +1,4 @@
 import SwiftUI
-import UIKit
-
-struct DeviceAuthorizationView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-    let authorization: DeviceAuthorization
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Image(systemName: "person.badge.key.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.tint)
-                Text("Connect GitHub")
-                    .font(.title.bold())
-                Text("Enter this one-time code on GitHub:")
-                    .foregroundStyle(.secondary)
-                Text(authorization.userCode)
-                    .font(.system(.title, design: .monospaced, weight: .bold))
-                    .textSelection(.enabled)
-                    .padding()
-                    .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                Button("Copy code and open GitHub") {
-                    UIPasteboard.general.string = authorization.userCode
-                    openURL(authorization.verificationURI)
-                }
-                .buttonStyle(.borderedProminent)
-                Text("Githulu will finish signing in automatically after authorization.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(28)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
 
 struct GitHubRepositoryPicker: View {
     @EnvironmentObject private var app: AppModel

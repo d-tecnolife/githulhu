@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 30
     env:
       GITHULU_CLIENT_ID: ${{ vars.GITHULU_CLIENT_ID }}
+      GITHULU_CLIENT_SECRET: ${{ secrets.GITHULU_CLIENT_SECRET }}
 
     steps:
       - name: Check out source
@@ -30,6 +31,10 @@ jobs:
             echo "::error::Set the GITHULU_CLIENT_ID Actions repository variable before building an IPA."
             exit 1
           fi
+          if [ -z "$GITHULU_CLIENT_SECRET" ]; then
+            echo "::error::Set the GITHULU_CLIENT_SECRET Actions repository secret before building an IPA."
+            exit 1
+          fi
           xcodebuild archive \
             -project Githulu.xcodeproj \
             -scheme Githulu \
@@ -37,6 +42,7 @@ jobs:
             -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/Githulu.xcarchive" \
             GITHUB_CLIENT_ID="$GITHULU_CLIENT_ID" \
+            GITHUB_CLIENT_SECRET="$GITHULU_CLIENT_SECRET" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
