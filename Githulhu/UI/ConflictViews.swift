@@ -71,7 +71,7 @@ struct ConflictListView: View {
             try await app.git.completeMerge(
                 repository: repository,
                 message: mergeMessage,
-                authorName: app.account?.name ?? app.account?.login ?? "Githulu User",
+                authorName: app.account?.name ?? app.account?.login ?? "Githulhu User",
                 authorEmail: "noreply@users.noreply.github.com"
             )
         }

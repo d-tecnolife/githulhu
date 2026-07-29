@@ -19,7 +19,7 @@ enum KeychainError: LocalizedError {
 }
 
 final class KeychainStore: TokenStoring {
-    private let service = "com.githulu.github"
+    private let service = "com.githulhu.github"
     private let account = "oauth-token"
 
     func saveToken(_ token: String) throws {

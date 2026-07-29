@@ -39,22 +39,22 @@ jobs:
               xcrun simctl list devicetypes
               exit 1
             fi
-            SIMULATOR_UDID="$(xcrun simctl create "Githulu CI iPhone" "$DEVICE_TYPE_ID" "$RUNTIME_ID")"
+            SIMULATOR_UDID="$(xcrun simctl create "Githulhu CI iPhone" "$DEVICE_TYPE_ID" "$RUNTIME_ID")"
           fi
 
           echo "Using simulator $SIMULATOR_UDID with runtime $RUNTIME_ID"
           echo "udid=$SIMULATOR_UDID" >> "$GITHUB_OUTPUT"
 
       - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Githulu.xcodeproj -scheme Githulu
+        run: xcodebuild -resolvePackageDependencies -project Githulhu.xcodeproj -scheme Githulhu
       - name: Build and test
         run: |
           set -o pipefail
           xcodebuild test \
-            -project Githulu.xcodeproj \
-            -scheme Githulu \
+            -project Githulhu.xcodeproj \
+            -scheme Githulhu \
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
-            -resultBundlePath "$RUNNER_TEMP/Githulu-tests.xcresult" \
+            -resultBundlePath "$RUNNER_TEMP/Githulhu-tests.xcresult" \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
@@ -62,16 +62,16 @@ jobs:
       - name: Print test failure summary
         if: failure()
         run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
-          xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/Githulu-tests.xcresult" || true
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Githulhu-tests.xcresult" || true
+          xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/Githulhu-tests.xcresult" || true
 
       - name: Upload Xcode failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Githulu-failure-diagnostics
+          name: Githulhu-failure-diagnostics
           path: |
-            ${{ runner.temp }}/Githulu-tests.xcresult
+            ${{ runner.temp }}/Githulhu-tests.xcresult
             ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: warn
           retention-days: 7

@@ -135,6 +135,9 @@ struct RepositoryView: View {
         }
         .navigationTitle(model.record.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            repositoryStatusBar
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
@@ -194,15 +197,23 @@ struct RepositoryView: View {
                     .font(.headline)
                 Spacer()
                 if let status = model.status {
-                    Text("\(status.changes.count) changed")
+                    Text(workingTreeLabel(status))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(
+                            status.changes.isEmpty ? Color.secondary : Color.orange
+                        )
                 }
             }
             if let status = model.status {
                 HStack(spacing: 18) {
-                    Label("\(status.ahead) ahead", systemImage: "arrow.up")
-                    Label("\(status.behind) behind", systemImage: "arrow.down")
+                    Label(
+                        status.ahead == 0 ? "Nothing to push" : "\(status.ahead) to push",
+                        systemImage: "arrow.up"
+                    )
+                    Label(
+                        status.behind == 0 ? "Nothing to pull" : "\(status.behind) to pull",
+                        systemImage: "arrow.down"
+                    )
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -257,14 +268,23 @@ struct RepositoryView: View {
         Button {
             showingChanges = true
         } label: {
-            HStack {
-                Label("Changes", systemImage: "doc.text.magnifyingglass")
-                    .font(.headline)
-                Spacer()
-                Text("\(model.changes.count)")
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label("Changes", systemImage: "doc.text.magnifyingglass")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(model.changes.count)")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                }
+                Text(
+                    model.changes.isEmpty
+                        ? "Your working tree is clean."
+                        : "Review files and choose what to include in your next commit."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .cardStyle()
         }
@@ -321,6 +341,61 @@ struct RepositoryView: View {
         record.message = model.lastResult ?? app.errorMessage ?? "\(kind.rawValue.capitalized) finished"
         record.finishedAt = .now
         try? modelContext.save()
+    }
+
+    private var repositoryStatusBar: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(statusBarText)
+                .font(.footnote.weight(.medium))
+                .lineLimit(2)
+            Spacer()
+            if model.isWorking {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(.bar)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(statusBarText)
+    }
+
+    private var statusBarText: String {
+        guard let status = model.status else { return "Checking repository status…" }
+        let staged = status.changes.filter(\.isStaged).count
+        if status.hasConflicts {
+            return "Conflicts need to be resolved before you can continue"
+        }
+        if !status.changes.isEmpty {
+            let stagedText = staged > 0 ? " · \(staged) selected for commit" : ""
+            let pushText = status.ahead > 0 ? " · \(status.ahead) ready to push" : ""
+            return "\(status.changes.count) uncommitted change\(status.changes.count == 1 ? "" : "s")\(stagedText)\(pushText)"
+        }
+        if status.ahead > 0 {
+            return "\(status.ahead) commit\(status.ahead == 1 ? "" : "s") ready to push"
+        }
+        if status.behind > 0 {
+            return "\(status.behind) commit\(status.behind == 1 ? "" : "s") available to pull"
+        }
+        return "Working tree clean · Up to date"
+    }
+
+    private var statusColor: Color {
+        guard let status = model.status else { return .secondary }
+        if status.hasConflicts { return .red }
+        if !status.changes.isEmpty { return .orange }
+        if status.ahead > 0 || status.behind > 0 { return .blue }
+        return .green
+    }
+
+    private func workingTreeLabel(_ status: GitRepositoryStatus) -> String {
+        status.changes.isEmpty
+            ? "Working tree clean"
+            : "\(status.changes.count) uncommitted"
     }
 }
 

@@ -265,7 +265,7 @@ actor LibGit2Service: GitServicing {
             try createCommit(
                 repository: repository,
                 message: "Merge origin/\(branch)",
-                name: "Githulu",
+                name: "Githulhu",
                 email: "noreply@users.noreply.github.com",
                 mergeParent: remoteOID
             )
