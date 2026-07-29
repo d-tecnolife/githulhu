@@ -1,6 +1,16 @@
 import Foundation
 import SwiftData
 
+enum RepositoryLocation {
+    static func normalizedPath(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    static func matches(_ first: URL, _ second: URL) -> Bool {
+        normalizedPath(first) == normalizedPath(second)
+    }
+}
+
 @Model
 final class RepositoryRecord {
     @Attribute(.unique) var id: UUID

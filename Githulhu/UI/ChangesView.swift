@@ -9,7 +9,7 @@ struct ChangesView: View {
     @State private var message = ""
     @State private var selectedChange: GitFileChange?
     @State private var diff: GitDiff?
-    @State private var authorName = "Githulu User"
+    @State private var authorName = "Githulhu User"
     @State private var authorEmail = "noreply@users.noreply.github.com"
 
     private var stagedCount: Int {
@@ -27,24 +27,41 @@ struct ChangesView: View {
                     )
                     .listRowBackground(Color.clear)
                 } else {
-                    Section("Files") {
+                    Section {
                         ForEach(model.changes) { change in
                             HStack {
                                 Button {
                                     Task { await toggleStage(change) }
                                 } label: {
-                                    Image(systemName: change.isStaged ? "checkmark.square.fill" : "square")
+                                    HStack(spacing: 10) {
+                                        Image(
+                                            systemName: change.isStaged
+                                                ? "checkmark.square.fill"
+                                                : "square"
+                                        )
                                         .font(.title3)
+                                        .foregroundStyle(
+                                            change.isStaged ? Color.accentColor : Color.secondary
+                                        )
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(change.path)
+                                                .font(.subheadline)
+                                                .lineLimit(2)
+                                            Text(
+                                                change.isStaged
+                                                    ? "Included · \(change.state.rawValue.capitalized)"
+                                                    : change.state.rawValue.capitalized
+                                            )
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
                                 .buttonStyle(.plain)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(change.path)
-                                        .font(.subheadline)
-                                        .lineLimit(2)
-                                    Text(change.state.rawValue.capitalized)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                .accessibilityLabel(
+                                    "\(change.path), \(change.isStaged ? "included" : "not included")"
+                                )
+                                .accessibilityHint("Toggles whether this file is included in the commit")
                                 Spacer()
                                 Button {
                                     selectedChange = change
@@ -56,18 +73,46 @@ struct ChangesView: View {
                                 .accessibilityLabel("View diff for \(change.path)")
                             }
                         }
-                    }
-                    Section("Commit") {
-                        TextField("Commit message", text: $message, axis: .vertical)
-                            .lineLimit(2...5)
-                        Button("Commit \(stagedCount) file\(stagedCount == 1 ? "" : "s")") {
-                            Task { await commit() }
+                    } header: {
+                        HStack {
+                            Text("Files to include")
+                            Spacer()
+                            Button(stagedCount == model.changes.count ? "Clear" : "Select All") {
+                                Task { await setAllStaged(stagedCount != model.changes.count) }
+                            }
+                            .textCase(nil)
+                            .font(.caption)
                         }
+                    } footer: {
+                        Text(
+                            stagedCount == 0
+                                ? "Tap a checkbox to include a changed file."
+                                : "\(stagedCount) of \(model.changes.count) files will be included."
+                        )
+                    }
+                    Section {
+                        TextField("Summarize your changes", text: $message, axis: .vertical)
+                            .lineLimit(2...5)
+                            .accessibilityLabel("Commit message")
+                        Button {
+                            Task { await commit() }
+                        } label: {
+                            Label(
+                                "Commit \(stagedCount) file\(stagedCount == 1 ? "" : "s")",
+                                systemImage: "checkmark.circle.fill"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
                         .disabled(stagedCount == 0 || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } header: {
+                        Text("Commit message")
+                    } footer: {
+                        Text(commitGuidance)
                     }
                 }
             }
-            .navigationTitle("Changes")
+            .navigationTitle("Review Changes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -78,9 +123,19 @@ struct ChangesView: View {
                 DiffView(change: change, diff: diff)
             }
             .onAppear {
-                authorName = app.account?.name ?? app.account?.login ?? "Githulu User"
+                authorName = app.account?.name ?? app.account?.login ?? "Githulhu User"
             }
         }
+    }
+
+    private var commitGuidance: String {
+        if stagedCount == 0 {
+            return "Choose at least one file above before committing."
+        }
+        if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Add a short message describing what changed."
+        }
+        return "This creates a local commit. Push when you are ready to send it to GitHub."
     }
 
     private func toggleStage(_ change: GitFileChange) async {
@@ -89,6 +144,21 @@ struct ChangesView: View {
                 try await app.git.unstage(repository: repository, path: change.path)
             } else {
                 try await app.git.stage(repository: repository, path: change.path)
+            }
+            try await model.refresh(app: app)
+        } catch {
+            app.report(error)
+        }
+    }
+
+    private func setAllStaged(_ shouldStage: Bool) async {
+        do {
+            for change in model.changes where change.isStaged != shouldStage {
+                if shouldStage {
+                    try await app.git.stage(repository: repository, path: change.path)
+                } else {
+                    try await app.git.unstage(repository: repository, path: change.path)
+                }
             }
             try await model.refresh(app: app)
         } catch {

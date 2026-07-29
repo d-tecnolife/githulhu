@@ -14,7 +14,7 @@ enum BookmarkError: LocalizedError {
         case .stale:
             return "This Files permission is stale. Select the folder again."
         case .accessDenied:
-            return "Githulu no longer has permission to access this folder."
+            return "Githulhu no longer has permission to access this folder."
         }
     }
 }

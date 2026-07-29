@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct GithuluApp: App {
+struct GithulhuApp: App {
     private let container: ModelContainer
     @StateObject private var appModel: AppModel
 
@@ -22,7 +22,7 @@ struct GithuluApp: App {
                 )
             )
         } catch {
-            fatalError("Unable to create the Githulu database: \(error)")
+            fatalError("Unable to create the Githulhu database: \(error)")
         }
     }
 

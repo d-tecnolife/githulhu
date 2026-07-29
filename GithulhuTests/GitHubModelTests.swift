@@ -1,5 +1,5 @@
 import XCTest
-@testable import Githulu
+@testable import Githulhu
 
 final class GitHubModelTests: XCTestCase {
     func testRepositoryDecodesGitHubWireNames() throws {
@@ -7,10 +7,10 @@ final class GitHubModelTests: XCTestCase {
             """
             {
               "id": 42,
-              "name": "githulu",
-              "full_name": "octocat/githulu",
+              "name": "githulhu",
+              "full_name": "octocat/githulhu",
               "description": "Git from an iPhone",
-              "clone_url": "https://github.com/octocat/githulu.git",
+              "clone_url": "https://github.com/octocat/githulhu.git",
               "private": true,
               "default_branch": "main"
             }
@@ -20,8 +20,8 @@ final class GitHubModelTests: XCTestCase {
         let repository = try JSONDecoder().decode(GitHubRepository.self, from: data)
 
         XCTAssertEqual(repository.id, 42)
-        XCTAssertEqual(repository.fullName, "octocat/githulu")
-        XCTAssertEqual(repository.cloneURL.absoluteString, "https://github.com/octocat/githulu.git")
+        XCTAssertEqual(repository.fullName, "octocat/githulhu")
+        XCTAssertEqual(repository.cloneURL.absoluteString, "https://github.com/octocat/githulhu.git")
         XCTAssertTrue(repository.isPrivate)
         XCTAssertEqual(repository.defaultBranch, "main")
     }
@@ -51,20 +51,20 @@ final class GitHubModelTests: XCTestCase {
         XCTAssertEqual(components.host, "github.com")
         XCTAssertEqual(components.path, "/login/oauth/authorize")
         XCTAssertEqual(query["client_id"], "test-client-id")
-        XCTAssertEqual(query["redirect_uri"], "githulu://oauth/callback")
+        XCTAssertEqual(query["redirect_uri"], "githulhu://oauth/callback")
         XCTAssertEqual(query["scope"], "repo read:user")
         XCTAssertEqual(query["state"], request.state)
         XCTAssertEqual(query["code_challenge_method"], "S256")
         XCTAssertEqual(query["code_challenge"], GitHubPKCE.challenge(for: request.codeVerifier))
-        XCTAssertEqual(request.callbackURLScheme, "githulu")
+        XCTAssertEqual(request.callbackURLScheme, "githulhu")
     }
 
     func testCallbackRequiresMatchingState() throws {
         let validURL = try XCTUnwrap(
-            URL(string: "githulu://oauth/callback?code=temporary-code&state=expected")
+            URL(string: "githulhu://oauth/callback?code=temporary-code&state=expected")
         )
         let invalidURL = try XCTUnwrap(
-            URL(string: "githulu://oauth/callback?code=temporary-code&state=attacker")
+            URL(string: "githulhu://oauth/callback?code=temporary-code&state=attacker")
         )
 
         XCTAssertEqual(
@@ -82,12 +82,12 @@ final class GitHubModelTests: XCTestCase {
         let service = GitHubService(clientID: "test-client-id", clientSecret: "")
         let request = GitHubAuthorizationRequest(
             authorizationURL: try XCTUnwrap(URL(string: "https://github.com/login/oauth/authorize")),
-            callbackURLScheme: "githulu",
+            callbackURLScheme: "githulhu",
             state: "expected",
             codeVerifier: "verifier"
         )
         let callback = try XCTUnwrap(
-            URL(string: "githulu://oauth/callback?code=temporary-code&state=expected")
+            URL(string: "githulhu://oauth/callback?code=temporary-code&state=expected")
         )
 
         do {

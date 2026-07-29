@@ -20,10 +20,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.githulu.app.oauth</string>
+			<string>com.githulhu.app.oauth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>githulu</string>
+				<string>githulhu</string>
 			</array>
 		</dict>
 	</array>

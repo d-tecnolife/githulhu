@@ -1,5 +1,5 @@
 import XCTest
-@testable import Githulu
+@testable import Githulhu
 
 final class GitSafetyTests: XCTestCase {
     func testDestructiveErrorsGiveActionableMessages() {
@@ -33,5 +33,12 @@ final class GitSafetyTests: XCTestCase {
 
         XCTAssertEqual(change.id, "Sources/App.swift")
         XCTAssertEqual(branch.id, "local:main")
+    }
+
+    func testRepositoryLocationNormalizesEquivalentFolderURLs() {
+        let direct = URL(fileURLWithPath: "/tmp/repos/project")
+        let equivalent = URL(fileURLWithPath: "/tmp/repos/other/../project")
+
+        XCTAssertTrue(RepositoryLocation.matches(direct, equivalent))
     }
 }

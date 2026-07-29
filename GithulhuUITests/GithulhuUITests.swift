@@ -1,6 +1,6 @@
 import XCTest
 
-final class GithuluUITests: XCTestCase {
+final class GithulhuUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -10,7 +10,7 @@ final class GithuluUITests: XCTestCase {
         app.launchArguments.append("-ui-testing")
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Githulu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Githulhu"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Sign in to GitHub"].exists)
     }
 

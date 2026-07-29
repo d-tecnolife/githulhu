@@ -81,7 +81,7 @@ protocol GitHubServicing {
 }
 
 final class GitHubService: GitHubServicing {
-    private static let callbackURL = URL(string: "githulu://oauth/callback")!
+    private static let callbackURL = URL(string: "githulhu://oauth/callback")!
     private let session: URLSession
     private let configuredClientID: String?
     private let configuredClientSecret: String?
