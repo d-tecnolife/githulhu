@@ -199,7 +199,9 @@ struct RepositoryView: View {
                 if let status = model.status {
                     Text(workingTreeLabel(status))
                         .font(.caption)
-                        .foregroundStyle(status.changes.isEmpty ? .secondary : .orange)
+                        .foregroundStyle(
+                            status.changes.isEmpty ? Color.secondary : Color.orange
+                        )
                 }
             }
             if let status = model.status {

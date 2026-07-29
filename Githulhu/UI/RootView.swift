@@ -438,7 +438,9 @@ private struct RepositoryRow: View {
                 if let status {
                     Text(statusText(status))
                         .font(.caption)
-                        .foregroundStyle(status.changes.isEmpty ? .secondary : .orange)
+                        .foregroundStyle(
+                            status.changes.isEmpty ? Color.secondary : Color.orange
+                        )
                 } else if let result {
                     Text(result)
                         .font(.caption)
