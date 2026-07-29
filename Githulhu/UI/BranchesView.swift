@@ -81,8 +81,15 @@ struct BranchesView: View {
                 }
             }
             Spacer()
-            if !branch.isCurrent {
-                Button(branch.isRemote ? "Track" : "Switch") {
+            if branch.isRemote {
+                if !isTracked(branch) {
+                    Button("Track") {
+                        Task { await switchTo(branch) }
+                    }
+                    .buttonStyle(.borderless)
+                }
+            } else if !branch.isCurrent {
+                Button("Switch") {
                     Task { await switchTo(branch) }
                 }
                 .buttonStyle(.borderless)
@@ -95,6 +102,12 @@ struct BranchesView: View {
                 }
                 .disabled(!branch.isMerged)
             }
+        }
+    }
+
+    private func isTracked(_ remoteBranch: GitBranch) -> Bool {
+        model.branches.contains { branch in
+            !branch.isRemote && branch.upstream == remoteBranch.name
         }
     }
 

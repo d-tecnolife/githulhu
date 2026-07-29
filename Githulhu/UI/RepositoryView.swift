@@ -128,7 +128,6 @@ struct RepositoryView: View {
                 }
                 filesCard
                 changesCard
-                branchesCard
                 if model.status?.hasConflicts == true || !model.conflicts.isEmpty {
                     conflictCard
                 }
@@ -200,8 +199,24 @@ struct RepositoryView: View {
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(model.status?.branch ?? "Loading…", systemImage: "arrow.triangle.branch")
+                Button {
+                    showingBranches = true
+                    Task { await model.fetchBranches(app: app) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Label(
+                            model.status?.branch ?? "Loading…",
+                            systemImage: "arrow.triangle.branch"
+                        )
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     .font(.headline)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.url == nil)
+                .accessibilityHint("Opens branch switching and management")
                 Spacer()
                 if let status = model.status {
                     Text(workingTreeLabel(status))
@@ -304,37 +319,17 @@ struct RepositoryView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Label("Browse Files", systemImage: "folder")
+                    Label("Repository Files", systemImage: "folder")
                         .font(.headline)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .foregroundStyle(.tertiary)
                 }
-                Text("Explore folders and read source files without leaving Githulhu.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             .cardStyle()
         }
         .buttonStyle(.plain)
         .disabled(model.url == nil)
-    }
-
-    private var branchesCard: some View {
-        Button {
-            showingBranches = true
-            Task { await model.fetchBranches(app: app) }
-        } label: {
-            HStack {
-                Label("Branches", systemImage: "arrow.triangle.branch")
-                    .font(.headline)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
-            }
-            .cardStyle()
-        }
-        .buttonStyle(.plain)
     }
 
     private var conflictCard: some View {

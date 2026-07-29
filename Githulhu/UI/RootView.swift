@@ -97,7 +97,7 @@ struct RootView: View {
                                 Button {
                                     quickBrowseRecord = repository
                                 } label: {
-                                    Label("Browse Files", systemImage: "folder")
+                                    Label("Repository Files", systemImage: "folder")
                                 }
                                 Button {
                                     quickCommitRecord = repository

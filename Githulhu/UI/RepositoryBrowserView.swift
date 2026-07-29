@@ -123,13 +123,9 @@ struct RepositoryBrowserView: View {
             RepositoryDirectoryView(
                 repository: repository,
                 directory: repository,
-                title: repository.lastPathComponent
+                title: repository.lastPathComponent,
+                close: { dismiss() }
             )
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
     }
 }
@@ -138,6 +134,7 @@ private struct RepositoryDirectoryView: View {
     let repository: URL
     let directory: URL
     let title: String
+    let close: () -> Void
 
     @State private var entries: [RepositoryEntry]?
     @State private var errorMessage: String?
@@ -164,13 +161,15 @@ private struct RepositoryDirectoryView: View {
                                 RepositoryDirectoryView(
                                     repository: repository,
                                     directory: entry.url,
-                                    title: entry.name
+                                    title: entry.name,
+                                    close: close
                                 )
                             } else {
                                 RepositoryFileView(
                                     repository: repository,
                                     file: entry.url,
-                                    byteCount: entry.byteCount
+                                    byteCount: entry.byteCount,
+                                    close: close
                                 )
                             }
                         } label: {
@@ -185,6 +184,11 @@ private struct RepositoryDirectoryView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: close)
+            }
+        }
         .task(id: directory) {
             do {
                 entries = try RepositoryFileAccess.entries(
@@ -240,6 +244,7 @@ private struct RepositoryFileView: View {
     let repository: URL
     let file: URL
     let byteCount: Int64?
+    let close: () -> Void
 
     @State private var content: RepositoryFileContent?
     @State private var errorMessage: String?
@@ -255,12 +260,11 @@ private struct RepositoryFileView: View {
             } else if let content {
                 switch content {
                 case .text(let text):
-                    ScrollView([.horizontal, .vertical]) {
+                    ScrollView(.vertical) {
                         Text(numbered(text))
                             .font(.system(.caption, design: .monospaced))
                             .textSelection(.enabled)
                             .padding()
-                            .fixedSize(horizontal: true, vertical: false)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
                     .background(Color(uiColor: .systemBackground))
@@ -285,6 +289,11 @@ private struct RepositoryFileView: View {
         }
         .navigationTitle(file.lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: close)
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Text(relativePath)
