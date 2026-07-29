@@ -28,6 +28,7 @@ struct RootView: View {
     @State private var activeCloneTask: Task<Void, Never>?
     @State private var pickerPrompt: PickerPrompt?
     @State private var quickCommitRecord: RepositoryRecord?
+    @State private var quickBrowseRecord: RepositoryRecord?
     @State private var rowStatuses: [UUID: GitRepositoryStatus] = [:]
     @State private var rowResults: [UUID: String] = [:]
     @State private var workingRepositoryIDs: Set<UUID> = []
@@ -93,6 +94,11 @@ struct RootView: View {
                                 )
                             }
                             .contextMenu {
+                                Button {
+                                    quickBrowseRecord = repository
+                                } label: {
+                                    Label("Browse Files", systemImage: "folder")
+                                }
                                 Button {
                                     quickCommitRecord = repository
                                 } label: {
@@ -177,6 +183,9 @@ struct RootView: View {
             }
             .sheet(item: $quickCommitRecord) { repository in
                 QuickCommitContainer(record: repository)
+            }
+            .sheet(item: $quickBrowseRecord) { repository in
+                RepositoryBrowserContainer(record: repository)
             }
         }
     }
@@ -519,6 +528,37 @@ private struct QuickCommitContainer: View {
             }
         }
         .task { await model.load(app: app) }
+    }
+}
+
+private struct RepositoryBrowserContainer: View {
+    @EnvironmentObject private var app: AppModel
+    let record: RepositoryRecord
+
+    @State private var scopedURL: ScopedURL?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if let scopedURL {
+                RepositoryBrowserView(repository: scopedURL.url)
+            } else if let errorMessage {
+                ContentUnavailableView(
+                    "Unable to open repository",
+                    systemImage: "folder.badge.questionmark",
+                    description: Text(errorMessage)
+                )
+            } else {
+                ProgressView("Opening \(record.displayName)…")
+            }
+        }
+        .task {
+            do {
+                scopedURL = try app.scopedURL(for: record)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }
 

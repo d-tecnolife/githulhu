@@ -109,6 +109,7 @@ struct RepositoryView: View {
     @State private var showingChanges = false
     @State private var showingBranches = false
     @State private var showingConflicts = false
+    @State private var showingFiles = false
 
     init(record: RepositoryRecord) {
         _model = StateObject(wrappedValue: RepositoryViewModel(record: record))
@@ -125,6 +126,7 @@ struct RepositoryView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
                 }
+                filesCard
                 changesCard
                 branchesCard
                 if model.status?.hasConflicts == true || !model.conflicts.isEmpty {
@@ -173,6 +175,11 @@ struct RepositoryView: View {
         .sheet(isPresented: $showingChanges) {
             if let url = model.url {
                 ChangesView(repository: url, model: model)
+            }
+        }
+        .sheet(isPresented: $showingFiles) {
+            if let url = model.url {
+                RepositoryBrowserView(repository: url)
             }
         }
         .sheet(isPresented: $showingBranches) {
@@ -289,6 +296,28 @@ struct RepositoryView: View {
             .cardStyle()
         }
         .buttonStyle(.plain)
+    }
+
+    private var filesCard: some View {
+        Button {
+            showingFiles = true
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label("Browse Files", systemImage: "folder")
+                        .font(.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                }
+                Text("Explore folders and read source files without leaving Githulhu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .cardStyle()
+        }
+        .buttonStyle(.plain)
+        .disabled(model.url == nil)
     }
 
     private var branchesCard: some View {
