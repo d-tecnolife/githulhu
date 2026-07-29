@@ -2,8 +2,8 @@
 
 Githulhu is a focused GitHub client for iPhone. It clones repositories into
 user-selected Files locations and provides status, diff, staging, commit,
-pull, push, conflict resolution, branch management, and read-only source
-browsing without bundling a code editor.
+pull, push, conflict resolution, branch management, syntax-highlighted source
+browsing, and lightweight text editing.
 
 ## Requirements
 

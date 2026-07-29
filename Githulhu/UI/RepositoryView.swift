@@ -176,7 +176,12 @@ struct RepositoryView: View {
                 ChangesView(repository: url, model: model)
             }
         }
-        .sheet(isPresented: $showingFiles) {
+        .sheet(
+            isPresented: $showingFiles,
+            onDismiss: {
+                Task { try? await model.refresh(app: app) }
+            }
+        ) {
             if let url = model.url {
                 RepositoryBrowserView(repository: url)
             }

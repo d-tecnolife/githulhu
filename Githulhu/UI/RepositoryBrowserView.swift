@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct RepositoryEntry: Identifiable, Equatable {
     var id: String { url.path }
@@ -20,6 +21,7 @@ enum RepositoryBrowserError: LocalizedError, Equatable {
     case outsideRepository
     case notAFile
     case unreadableText
+    case fileTooLargeToSave
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +31,8 @@ enum RepositoryBrowserError: LocalizedError, Equatable {
             return "This item is not a readable file."
         case .unreadableText:
             return "This file is not encoded as supported text."
+        case .fileTooLargeToSave:
+            return "The edited file is too large to save in Githulhu."
         }
     }
 }
@@ -100,6 +104,31 @@ enum RepositoryFileAccess {
         return .text(text)
     }
 
+    static func write(text: String, to file: URL, repositoryRoot: URL) throws {
+        guard contains(file, repositoryRoot: repositoryRoot) else {
+            throw RepositoryBrowserError.outsideRepository
+        }
+
+        let values = try file.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else {
+            throw RepositoryBrowserError.notAFile
+        }
+
+        let data = Data(text.utf8)
+        guard Int64(data.count) <= maximumReadableBytes else {
+            throw RepositoryBrowserError.fileTooLargeToSave
+        }
+
+        let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
+        try data.write(to: file, options: .atomic)
+        if let permissions = attributes?[.posixPermissions] {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: permissions],
+                ofItemAtPath: file.path
+            )
+        }
+    }
+
     static func contains(_ candidate: URL, repositoryRoot: URL) -> Bool {
         let rootPath = repositoryRoot
             .resolvingSymlinksInPath()
@@ -111,6 +140,168 @@ enum RepositoryFileAccess {
             .path
 
         return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+}
+
+enum SyntaxHighlighter {
+    static func highlight(_ source: String, fileExtension: String) -> AttributedString {
+        let font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let highlighted = NSMutableAttributedString(
+            string: source,
+            attributes: [
+                .font: font,
+                .foregroundColor: UIColor.label
+            ]
+        )
+        let fullRange = NSRange(location: 0, length: highlighted.length)
+
+        apply(
+            pattern: #"\b\d+(?:\.\d+)?\b"#,
+            color: .systemOrange,
+            to: highlighted,
+            range: fullRange
+        )
+
+        let keywords = keywords(for: fileExtension)
+        if !keywords.isEmpty {
+            let escaped = keywords.map(NSRegularExpression.escapedPattern(for:))
+            apply(
+                pattern: #"\b(?:"# + escaped.joined(separator: "|") + #")\b"#,
+                color: .systemPink,
+                to: highlighted,
+                range: fullRange
+            )
+        }
+
+        if ["json", "jsonc"].contains(fileExtension.lowercased()) {
+            apply(
+                pattern: #""(?:\\.|[^"\\])*"(?=\s*:)"#,
+                color: .systemBlue,
+                to: highlighted,
+                range: fullRange
+            )
+        }
+
+        apply(
+            pattern: #""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`"#,
+            color: .systemGreen,
+            to: highlighted,
+            range: fullRange
+        )
+        apply(
+            pattern: commentPattern(for: fileExtension),
+            color: .secondaryLabel,
+            to: highlighted,
+            range: fullRange,
+            options: [.anchorsMatchLines]
+        )
+
+        return addLineNumbers(to: highlighted, font: font)
+    }
+
+    private static func apply(
+        pattern: String,
+        color: UIColor,
+        to text: NSMutableAttributedString,
+        range: NSRange,
+        options: NSRegularExpression.Options = []
+    ) {
+        guard let expression = try? NSRegularExpression(pattern: pattern, options: options) else {
+            return
+        }
+        expression.enumerateMatches(in: text.string, range: range) { match, _, _ in
+            guard let match else { return }
+            text.addAttribute(.foregroundColor, value: color, range: match.range)
+        }
+    }
+
+    private static func addLineNumbers(
+        to highlighted: NSAttributedString,
+        font: UIFont
+    ) -> AttributedString {
+        let output = NSMutableAttributedString(string: "")
+        let source = highlighted.string as NSString
+        var location = 0
+        var lineNumber = 1
+
+        repeat {
+            let lineRange = source.lineRange(
+                for: NSRange(location: min(location, source.length), length: 0)
+            )
+            output.append(
+                NSAttributedString(
+                    string: String(format: "%4d  ", lineNumber),
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: UIColor.tertiaryLabel
+                    ]
+                )
+            )
+            if lineRange.length > 0 {
+                output.append(highlighted.attributedSubstring(from: lineRange))
+            }
+            location = NSMaxRange(lineRange)
+            lineNumber += 1
+        } while location < source.length
+
+        return AttributedString(output)
+    }
+
+    private static func keywords(for fileExtension: String) -> [String] {
+        switch fileExtension.lowercased() {
+        case "swift":
+            return [
+                "actor", "associatedtype", "async", "await", "break", "case", "catch",
+                "class", "continue", "default", "defer", "do", "else", "enum", "extension",
+                "false", "for", "func", "guard", "if", "import", "in", "init", "inout",
+                "internal", "is", "let", "nil", "nonisolated", "open", "private", "protocol",
+                "public", "repeat", "return", "self", "some", "static", "struct", "super",
+                "switch", "throw", "throws", "true", "try", "typealias", "var", "where",
+                "while"
+            ]
+        case "js", "jsx", "mjs", "cjs", "ts", "tsx":
+            return [
+                "async", "await", "break", "case", "catch", "class", "const", "continue",
+                "default", "delete", "do", "else", "export", "extends", "false", "finally",
+                "for", "from", "function", "if", "import", "in", "instanceof", "interface",
+                "let", "new", "null", "of", "return", "static", "super", "switch", "this",
+                "throw", "true", "try", "type", "typeof", "undefined", "var", "while"
+            ]
+        case "py":
+            return [
+                "and", "as", "assert", "async", "await", "break", "class", "continue",
+                "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
+                "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not",
+                "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"
+            ]
+        case "c", "h", "cc", "cpp", "cxx", "hpp", "m", "mm", "java", "kt", "kts":
+            return [
+                "abstract", "auto", "boolean", "break", "case", "catch", "char", "class",
+                "const", "continue", "default", "do", "double", "else", "enum", "extends",
+                "false", "final", "finally", "float", "for", "if", "implements", "import",
+                "instanceof", "int", "interface", "long", "namespace", "new", "null",
+                "private", "protected", "public", "return", "short", "static", "struct",
+                "super", "switch", "this", "throw", "true", "try", "void", "while"
+            ]
+        case "sh", "bash", "zsh":
+            return [
+                "case", "do", "done", "elif", "else", "esac", "fi", "for", "function",
+                "if", "in", "select", "then", "until", "while"
+            ]
+        default:
+            return []
+        }
+    }
+
+    private static func commentPattern(for fileExtension: String) -> String {
+        switch fileExtension.lowercased() {
+        case "py", "sh", "bash", "zsh", "yml", "yaml", "toml":
+            return #"#.*$"#
+        case "html", "htm", "xml", "md":
+            return #"<!--[\s\S]*?-->"#
+        default:
+            return #"//.*$|/\*[\s\S]*?\*/"#
+        }
     }
 }
 
@@ -248,6 +439,12 @@ private struct RepositoryFileView: View {
 
     @State private var content: RepositoryFileContent?
     @State private var errorMessage: String?
+    @State private var originalText = ""
+    @State private var draft = ""
+    @State private var isEditing = false
+    @State private var editorError: String?
+    @State private var showingDiscardConfirmation = false
+    @State private var didSave = false
 
     var body: some View {
         Group {
@@ -260,14 +457,29 @@ private struct RepositoryFileView: View {
             } else if let content {
                 switch content {
                 case .text(let text):
-                    ScrollView(.vertical) {
-                        Text(numbered(text))
-                            .font(.system(.caption, design: .monospaced))
+                    if isEditing {
+                        TextEditor(text: $draft)
+                            .font(.system(.body, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding()
+                            .scrollContentBackground(.hidden)
+                            .background(Color(uiColor: .systemBackground))
+                            .accessibilityLabel("File editor")
+                    } else {
+                        ScrollView(.vertical) {
+                            Text(
+                                SyntaxHighlighter.highlight(
+                                    text,
+                                    fileExtension: file.pathExtension
+                                )
+                            )
                             .textSelection(.enabled)
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .background(Color(uiColor: .systemBackground))
                     }
-                    .background(Color(uiColor: .systemBackground))
                 case .binary:
                     ContentUnavailableView(
                         "Binary file",
@@ -291,24 +503,75 @@ private struct RepositoryFileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done", action: close)
+                Button("Done", action: attemptToClose)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            HStack {
-                Text(relativePath)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                if let byteCount {
-                    Text(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file))
+            VStack(spacing: 8) {
+                if didSave {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                if isEditing {
+                    HStack {
+                        Button("Cancel", role: .cancel, action: cancelEditing)
+                        Spacer()
+                        Text("Editing")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Save", action: save)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(draft == originalText)
+                    }
+                } else {
+                    HStack {
+                        Text(relativePath)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let displayedByteCount {
+                            Text(
+                                ByteCountFormatter.string(
+                                    fromByteCount: displayedByteCount,
+                                    countStyle: .file
+                                )
+                            )
+                        }
+                        Spacer()
+                        if editableText != nil {
+                            Button("Edit", action: beginEditing)
+                                .buttonStyle(.bordered)
+                        }
+                    }
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.bar)
+        }
+        .confirmationDialog(
+            "Discard unsaved changes?",
+            isPresented: $showingDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Discard and close", role: .destructive) {
+                close()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your edits to \(file.lastPathComponent) have not been saved.")
+        }
+        .alert(
+            "Couldn’t save file",
+            isPresented: Binding(
+                get: { editorError != nil },
+                set: { if !$0 { editorError = nil } }
+            )
+        ) {
+            Button("OK") { editorError = nil }
+        } message: {
+            Text(editorError ?? "")
         }
         .task(id: file) {
             do {
@@ -316,6 +579,10 @@ private struct RepositoryFileView: View {
                     file: file,
                     repositoryRoot: repository
                 )
+                if case .text(let text)? = content {
+                    originalText = text
+                    draft = text
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -329,13 +596,52 @@ private struct RepositoryFileView: View {
         return String(path.dropFirst(root.count + 1))
     }
 
-    private func numbered(_ text: String) -> String {
-        text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .map { index, line in
-                "\(String(format: "%4d", index + 1))  \(line)"
-            }
-            .joined(separator: "\n")
+    private var editableText: String? {
+        guard case .text(let text)? = content else { return nil }
+        return text
+    }
+
+    private var displayedByteCount: Int64? {
+        if let editableText {
+            return Int64(editableText.utf8.count)
+        }
+        return byteCount
+    }
+
+    private func beginEditing() {
+        guard let editableText else { return }
+        originalText = editableText
+        draft = editableText
+        didSave = false
+        isEditing = true
+    }
+
+    private func cancelEditing() {
+        draft = originalText
+        isEditing = false
+    }
+
+    private func save() {
+        do {
+            try RepositoryFileAccess.write(
+                text: draft,
+                to: file,
+                repositoryRoot: repository
+            )
+            originalText = draft
+            content = .text(draft)
+            isEditing = false
+            didSave = true
+        } catch {
+            editorError = error.localizedDescription
+        }
+    }
+
+    private func attemptToClose() {
+        if isEditing && draft != originalText {
+            showingDiscardConfirmation = true
+        } else {
+            close()
+        }
     }
 }
