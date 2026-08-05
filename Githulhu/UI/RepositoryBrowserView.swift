@@ -1,6 +1,8 @@
 import Foundation
+import QuickLook
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct RepositoryEntry: Identifiable, Equatable {
     var id: String { url.path }
@@ -127,6 +129,13 @@ enum RepositoryFileAccess {
                 ofItemAtPath: file.path
             )
         }
+    }
+
+    static func shouldPreviewNatively(file: URL) -> Bool {
+        guard let type = UTType(filenameExtension: file.pathExtension) else {
+            return false
+        }
+        return !type.conforms(to: .text)
     }
 
     static func contains(_ candidate: URL, repositoryRoot: URL) -> Bool {
@@ -366,13 +375,6 @@ private struct RepositoryDirectoryView: View {
                         } label: {
                             RepositoryEntryRow(entry: entry)
                         }
-                        .contextMenu {
-                            if !entry.isDirectory {
-                                ShareLink(item: entry.url) {
-                                    Label("Download", systemImage: "square.and.arrow.down")
-                                }
-                            }
-                        }
                     }
                     .listStyle(.plain)
                 }
@@ -439,6 +441,8 @@ private struct RepositoryEntryRow: View {
 }
 
 private struct RepositoryFileView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let repository: URL
     let file: URL
     let byteCount: Int64?
@@ -452,6 +456,8 @@ private struct RepositoryFileView: View {
     @State private var editorError: String?
     @State private var showingDiscardConfirmation = false
     @State private var didSave = false
+    @State private var previewURL: URL?
+    @State private var automaticallyPresentedPreview = false
 
     var body: some View {
         Group {
@@ -545,10 +551,6 @@ private struct RepositoryFileView: View {
                             )
                         }
                         Spacer()
-                        ShareLink(item: file) {
-                            Label("Download", systemImage: "square.and.arrow.down")
-                        }
-                        .buttonStyle(.bordered)
                         if editableText != nil {
                             Button("Edit", action: beginEditing)
                                 .buttonStyle(.bordered)
@@ -585,17 +587,32 @@ private struct RepositoryFileView: View {
             Text(editorError ?? "")
         }
         .task(id: file) {
+            if RepositoryFileAccess.shouldPreviewNatively(file: file) {
+                presentPreview()
+                return
+            }
             do {
-                content = try RepositoryFileAccess.read(
+                let loadedContent = try RepositoryFileAccess.read(
                     file: file,
                     repositoryRoot: repository
                 )
-                if case .text(let text)? = content {
+                content = loadedContent
+                if case .text(let text) = loadedContent {
                     originalText = text
                     draft = text
+                } else {
+                    presentPreview()
                 }
+            } catch RepositoryBrowserError.unreadableText {
+                presentPreview()
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+        .quickLookPreview($previewURL)
+        .onChange(of: previewURL) { previousURL, newURL in
+            if previousURL != nil, newURL == nil, automaticallyPresentedPreview {
+                dismiss()
             }
         }
     }
@@ -654,5 +671,10 @@ private struct RepositoryFileView: View {
         } else {
             close()
         }
+    }
+
+    private func presentPreview() {
+        automaticallyPresentedPreview = true
+        previewURL = file
     }
 }

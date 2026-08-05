@@ -133,6 +133,29 @@ final class RepositoryBrowserTests: XCTestCase {
         )
     }
 
+    func testNativePreviewRoutingKeepsTextInReader() {
+        XCTAssertFalse(
+            RepositoryFileAccess.shouldPreviewNatively(
+                file: URL(fileURLWithPath: "/repo/notes.txt")
+            )
+        )
+        XCTAssertTrue(
+            RepositoryFileAccess.shouldPreviewNatively(
+                file: URL(fileURLWithPath: "/repo/manual.pdf")
+            )
+        )
+        XCTAssertTrue(
+            RepositoryFileAccess.shouldPreviewNatively(
+                file: URL(fileURLWithPath: "/repo/photo.jpg")
+            )
+        )
+        XCTAssertTrue(
+            RepositoryFileAccess.shouldPreviewNatively(
+                file: URL(fileURLWithPath: "/repo/video.mp4")
+            )
+        )
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("GithulhuTests-\(UUID().uuidString)", isDirectory: true)
