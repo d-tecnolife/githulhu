@@ -1,4 +1,5 @@
 import Foundation
+import QuickLook
 import SwiftUI
 import UIKit
 
@@ -329,6 +330,7 @@ private struct RepositoryDirectoryView: View {
 
     @State private var entries: [RepositoryEntry]?
     @State private var errorMessage: String?
+    @State private var previewURL: URL?
 
     var body: some View {
         Group {
@@ -368,8 +370,10 @@ private struct RepositoryDirectoryView: View {
                         }
                         .contextMenu {
                             if !entry.isDirectory {
-                                ShareLink(item: entry.url) {
-                                    Label("Download", systemImage: "square.and.arrow.down")
+                                Button {
+                                    previewURL = entry.url
+                                } label: {
+                                    Label("Preview", systemImage: "eye")
                                 }
                             }
                         }
@@ -397,6 +401,7 @@ private struct RepositoryDirectoryView: View {
                 errorMessage = error.localizedDescription
             }
         }
+        .quickLookPreview($previewURL)
     }
 }
 
@@ -452,6 +457,7 @@ private struct RepositoryFileView: View {
     @State private var editorError: String?
     @State private var showingDiscardConfirmation = false
     @State private var didSave = false
+    @State private var previewURL: URL?
 
     var body: some View {
         Group {
@@ -545,8 +551,10 @@ private struct RepositoryFileView: View {
                             )
                         }
                         Spacer()
-                        ShareLink(item: file) {
-                            Label("Download", systemImage: "square.and.arrow.down")
+                        Button {
+                            previewURL = file
+                        } label: {
+                            Label("Preview", systemImage: "eye")
                         }
                         .buttonStyle(.bordered)
                         if editableText != nil {
@@ -598,6 +606,7 @@ private struct RepositoryFileView: View {
                 errorMessage = error.localizedDescription
             }
         }
+        .quickLookPreview($previewURL)
     }
 
     private var relativePath: String {
