@@ -184,7 +184,12 @@ struct RootView: View {
             .sheet(item: $quickCommitRecord) { repository in
                 QuickCommitContainer(record: repository)
             }
-            .sheet(item: $quickBrowseRecord) { repository in
+            .sheet(
+                item: $quickBrowseRecord,
+                onDismiss: {
+                    Task { await refreshRowStatuses() }
+                }
+            ) { repository in
                 RepositoryBrowserContainer(record: repository)
             }
         }
