@@ -338,7 +338,6 @@ private struct RepositoryDirectoryView: View {
 
     @State private var entries: [RepositoryEntry]?
     @State private var errorMessage: String?
-    @State private var showingFiles = false
 
     var body: some View {
         Group {
@@ -386,14 +385,6 @@ private struct RepositoryDirectoryView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showingFiles = true
-                } label: {
-                    Label("Open in Files", systemImage: "folder")
-                }
-                .accessibilityHint("Opens the current folder in the system file browser")
-            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done", action: close)
             }
@@ -407,10 +398,6 @@ private struct RepositoryDirectoryView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
-        }
-        .sheet(isPresented: $showingFiles) {
-            FilesDirectoryBrowser(directory: directory, isPresented: $showingFiles)
-                .ignoresSafeArea()
         }
     }
 }
@@ -689,48 +676,5 @@ private struct RepositoryFileView: View {
     private func presentPreview() {
         automaticallyPresentedPreview = true
         previewURL = file
-    }
-}
-
-private struct FilesDirectoryBrowser: UIViewControllerRepresentable {
-    let directory: URL
-    @Binding var isPresented: Bool
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(isPresented: $isPresented)
-    }
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(
-            forOpeningContentTypes: [.item],
-            asCopy: false
-        )
-        picker.directoryURL = directory
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(
-        _ uiViewController: UIDocumentPickerViewController,
-        context: Context
-    ) {}
-
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        @Binding private var isPresented: Bool
-
-        init(isPresented: Binding<Bool>) {
-            _isPresented = isPresented
-        }
-
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            isPresented = false
-        }
-
-        func documentPicker(
-            _ controller: UIDocumentPickerViewController,
-            didPickDocumentsAt urls: [URL]
-        ) {
-            isPresented = false
-        }
     }
 }
