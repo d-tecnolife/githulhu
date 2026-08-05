@@ -366,6 +366,13 @@ private struct RepositoryDirectoryView: View {
                         } label: {
                             RepositoryEntryRow(entry: entry)
                         }
+                        .contextMenu {
+                            if !entry.isDirectory {
+                                ShareLink(item: entry.url) {
+                                    Label("Download", systemImage: "square.and.arrow.down")
+                                }
+                            }
+                        }
                     }
                     .listStyle(.plain)
                 }
@@ -538,6 +545,10 @@ private struct RepositoryFileView: View {
                             )
                         }
                         Spacer()
+                        ShareLink(item: file) {
+                            Label("Download", systemImage: "square.and.arrow.down")
+                        }
+                        .buttonStyle(.bordered)
                         if editableText != nil {
                             Button("Edit", action: beginEditing)
                                 .buttonStyle(.bordered)
